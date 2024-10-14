@@ -102,12 +102,9 @@ def handle_header_for_md(tokens, toc: Optional[List] = None):
     handle_tokens = []
     for token in tokens:
         _token = token.strip("#").strip()
-        print(f"====={token}")
         if toc_index < toc_length:
             header_level, header_content, _ = toc[toc_index]
-            print(f"------{header_content}")
             if header_content == _token:
-                print("----------")
                 _token = f"{'#'*header_level} {_token}"
                 toc_index += 1
         handle_tokens.append(_token)
@@ -124,7 +121,7 @@ def handle_md(md_file, toc):
     return "\n\n".join(tokens)
 
 
-def single_wrangler(origin_doc, handler_file, doc_name):
+def single_wrangler(origin_doc, handler_file, doc_name, auto_transfer):
     # choose mineru's file
     handler_type_folder = os.listdir(handler_file)[0]
     current_handler_file = os.path.join(
@@ -132,12 +129,15 @@ def single_wrangler(origin_doc, handler_file, doc_name):
     )
     doc = pymupdf.open(origin_doc)
     toc = doc.get_toc()
-    md_content = handle_md(current_handler_file, toc)
-    md = MarkdownIt()
-    return md.render(md_content)
+    content = handle_md(current_handler_file, toc)
+    file_name = f"{doc_name}.md"
+    if auto_transfer:
+        marker = MarkdownIt()
+        content, file_name = marker.render(content), f"{doc_name}.html"
+    return content, file_name
 
 
-def wrangler(extractor_path: str, output_path: str):
+def wrangler(extractor_path: str, output_path: str, auto_transfer: bool):
     documents = [extractor_path]
     if os.path.isdir(extractor_path):
         documents = [
@@ -149,9 +149,11 @@ def wrangler(extractor_path: str, output_path: str):
     for origin_doc in tqdm(documents, desc="File processing..."):
         doc_name = pathlib.Path(origin_doc).name.split(".")[0]
         handler_file = os.path.join(EXTRACTED_FILE_PATH, doc_name)
-        html_content = single_wrangler(origin_doc, handler_file, doc_name)
-        with open(os.path.join(output_path, f"{doc_name}.md"), "w") as f:
-            f.write(html_content)
+        content, file_name = single_wrangler(
+            origin_doc, handler_file, doc_name, auto_transfer
+        )
+        with open(os.path.join(output_path, file_name), "w") as f:
+            f.write(content)
 
 
 def extractor(extractor_path: str):
@@ -179,7 +181,14 @@ def extractor(extractor_path: str):
     required=True,
     type=str,
 )
-def main(file_path: str, output_folder: str):
+@click.option(
+    "-a",
+    "--auto_transfer",
+    prompt="auto convert markdown to html",
+    type=bool,
+    default=False,
+)
+def main(file_path: str, output_folder: str, auto_transfer: bool):
     if not os.path.exists(BASE_PATH):
         for path in [BASE_PATH, EXTRACTED_FILE_PATH, ORIGIN_FILE_PATH]:
             os.mkdir(path)
@@ -190,7 +199,7 @@ def main(file_path: str, output_folder: str):
     path_name = os.path.split(file_path)[-1]
     extractor_path = os.path.join(ORIGIN_FILE_PATH, path_name)
     extractor(extractor_path)
-    wrangler(extractor_path, output_folder)
+    wrangler(extractor_path, output_folder, auto_transfer)
 
 
 if __name__ == "__main__":
